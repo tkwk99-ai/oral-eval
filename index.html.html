@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>인지가치독서심화탐구구술평가 통합 시스템</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1e293b; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #64748b; }
+    </style>
+</head>
+<body class="bg-slate-50 font-sans min-h-screen text-slate-800">
+
+    <!-- 알림 모달 -->
+    <div id="custom-modal" class="hidden fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+        <div class="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-slate-100 text-center space-y-4">
+            <div id="modal-icon" class="text-3xl">💡</div>
+            <h3 id="modal-title" class="text-base font-bold text-slate-900">알림</h3>
+            <p id="modal-desc" class="text-xs text-slate-600 leading-relaxed"></p>
+            <div id="modal-buttons" class="flex gap-2 pt-2">
+                <button id="modal-ok-btn" onclick="window.closeCustomModal()" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition shadow-sm">확인</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="max-w-5xl mx-auto p-4 sm:p-6">
+        
+        <!-- 상단 헤더 -->
+        <header class="flex flex-col sm:flex-row justify-between items-center bg-white p-5 rounded-2xl shadow-sm mb-6 gap-4 border border-slate-100">
+            <div>
+                <h1 class="text-xl sm:text-2xl font-black text-indigo-700 tracking-tight">📚 인지가치독서심화탐구구술평가</h1>
+                <p class="text-xs sm:text-sm text-slate-500 mt-1">영역 선택형 스마트 구술평가 클라우드 시스템</p>
+            </div>
+            <div class="flex bg-slate-100 p-1 rounded-xl w-full sm:w-auto">
+                <button id="tab-student-btn" onclick="window.switchTab('student')" class="flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-semibold transition bg-indigo-600 text-white shadow-sm">학생용 평가 화면</button>
+                <button id="tab-teacher-btn" onclick="window.switchTab('teacher')" class="flex-1 sm:flex-none px-5 py-2.5 rounded-lg text-sm font-semibold transition text-slate-600 hover:text-indigo-600">교사 관리 대시보드</button>
+            </div>
+        </header>
+
+        <!-- 학생 화면 -->
+        <main id="view-student" class="space-y-6 relative">
+            
+            <!-- 20분 전체 타이머 배너 -->
+            <div id="global-timer-banner" class="hidden bg-slate-900 text-white px-5 py-3 rounded-2xl shadow-lg flex justify-between items-center sticky top-4 z-40 border border-slate-700">
+                <div class="flex items-center gap-3">
+                    <span class="text-lg animate-pulse">⏳</span>
+                    <div>
+                        <p class="text-[10px] text-slate-400 font-bold uppercase tracking-wider">Total Time</p>
+                        <p class="text-sm font-bold">전체 남은 시간 (제한 20분)</p>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div id="global-timer-display" class="text-2xl font-mono font-black text-emerald-400 leading-none tracking-tight">20:00</div>
+                    <div id="global-timer-elapsed" class="text-[10px] text-slate-400 mt-1 font-mono">경과: 00:00</div>
+                </div>
+            </div>
+
+            <!-- 학생 검색 카드 -->
+            <div id="student-login-card" class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-lg mx-auto space-y-6">
+                <div>
+                    <h2 class="text-lg font-bold text-slate-800 mb-1">구술평가 입장하기</h2>
+                    <p class="text-xs text-slate-500">학생 <strong>이름</strong> 또는 <strong>번호</strong>를 입력하세요.</p>
+                </div>
+                
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-xs font-bold text-slate-600 uppercase mb-1">이름 또는 번호 검색</label>
+                        <div class="flex gap-2">
+                            <input type="text" id="search-query" onkeydown="if(event.key==='Enter'){event.preventDefault(); window.searchStudentData();}" placeholder="예: 홍길동 또는 5(번호)" class="flex-1 px-4 py-3 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm">
+                            <button onclick="window.searchStudentData()" class="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition shadow-sm">조회</button>
+                        </div>
+                    </div>
+
+                    <div id="search-result-box" class="hidden space-y-3">
+                        <p id="search-count-title" class="text-xs font-bold text-indigo-900"></p>
+                        <div id="student-list-container" class="space-y-2 max-h-60 overflow-y-auto pr-1"></div>
+                    </div>
+
+                    <div id="manual-entry-box" class="hidden bg-amber-50/60 border border-amber-200 p-4 rounded-xl space-y-3">
+                        <div class="text-xs font-bold text-amber-900">⚠️ 검색 결과가 없습니다. 직접 정보를 입력하고 시작할 수 있습니다.</div>
+                        <div class="space-y-2 text-xs">
+                            <div class="grid grid-cols-2 gap-2">
+                                <input type="text" id="manual-name" placeholder="이름 (예: 홍길동)" class="px-3 py-2 bg-white border border-amber-200 rounded-lg">
+                                <div class="grid grid-cols-2 gap-1">
+                                    <input type="text" id="manual-class" placeholder="반" class="px-3 py-2 bg-white border border-amber-200 rounded-lg">
+                                    <input type="text" id="manual-no" placeholder="번호" class="px-3 py-2 bg-white border border-amber-200 rounded-lg">
+                                </div>
+                            </div>
+                            <input type="text" id="manual-book" placeholder="도서명" class="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg">
+                            <input type="text" id="manual-author" placeholder="저자명" class="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg">
+                            <select id="manual-category" class="w-full px-3 py-2 bg-white border border-amber-200 rounded-lg font-semibold text-indigo-700">
+                                <option value="novel">도서 분류: 문학(소설)</option>
+                                <option value="non-novel">도서 분류: 비문학</option>
+                            </select>
+                        </div>
+                        <button type="button" onclick="window.startManualEval()" class="w-full py-3 bg-amber-600 hover:bg-amber-700 text-white font-bold transition text-sm shadow-sm rounded-xl">직접 입력 정보로 평가 시작하기</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 권한 요청 카드 -->
+            <div id="student-permission-card" class="hidden bg-white p-8 sm:p-10 rounded-2xl shadow-sm border border-slate-100 max-w-lg mx-auto space-y-6 text-center">
+                <div class="text-5xl mb-4 animate-bounce">🎙️📹</div>
+                <h2 class="text-xl font-black text-slate-800 tracking-tight">카메라 및 마이크 권한 허용 필수</h2>
+                <p class="text-sm text-slate-600 leading-relaxed">
+                    구술평가 영상/음성 녹화를 위해 카메라와 마이크 권한이 필요합니다.<br>
+                    아래 버튼을 누른 후, 브라우저 상단에서 <strong>반드시 '허용'</strong>을 클릭해주세요.
+                </p>
+                <button onclick="window.requestPermissionsAndEnterHub()" class="w-full py-4 mt-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-base transition shadow-md rounded-xl">
+                    권한 요청 및 평가 대시보드 입장하기
+                </button>
+            </div>
+
+            <!-- 대시보드 -->
+            <div id="student-hub-card" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-3xl mx-auto space-y-6">
+                <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center border-b pb-4 gap-4">
+                    <div>
+                        <h2 class="text-xl font-black text-slate-800 tracking-tight">구술평가 대시보드</h2>
+                        <p class="text-xs text-slate-500 mt-1">원하는 영역을 선택하여 개별적으로 녹화를 진행하세요.</p>
+                    </div>
+                    <div class="bg-indigo-50 p-3 rounded-xl border border-indigo-100 text-right w-full sm:w-auto">
+                        <p id="hub-student-meta" class="font-bold text-indigo-900 text-sm">-</p>
+                        <p id="hub-book-meta" class="text-[11px] text-indigo-600 mt-0.5">-</p>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div id="card-box-cognitive" class="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-bold text-slate-800 text-base">1단계: 인지 질문</h3>
+                                <span id="status-badge-cognitive" class="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg uppercase">미완료</span>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed">도서 내용 파악 및 분석 능력을 평가하는 질문입니다.</p>
+                        </div>
+                        <button id="btn-start-cognitive" onclick="window.openPrepCard('cognitive')" class="w-full py-2.5 bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold rounded-xl">해당 영역 평가하기</button>
+                    </div>
+
+                    <div id="card-box-cognitiveAdv" class="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-bold text-slate-800 text-base">2단계: 인지 심화 질문</h3>
+                                <span id="status-badge-cognitiveAdv" class="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg uppercase">미완료</span>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed">학생 개인별로 별도 제시된 인지 심화 문항을 구술합니다.</p>
+                        </div>
+                        <button id="btn-start-cognitiveAdv" onclick="window.openPrepCard('cognitiveAdv')" class="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-bold rounded-xl">해당 영역 평가하기</button>
+                    </div>
+
+                    <div id="card-box-value" class="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-bold text-slate-800 text-base">3단계: 가치 질문</h3>
+                                <span id="status-badge-value" class="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg uppercase">미완료</span>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed">윤리적 딜레마 및 가치관 탐구를 위한 질문입니다.</p>
+                        </div>
+                        <button id="btn-start-value" onclick="window.openPrepCard('value')" class="w-full py-2.5 bg-purple-600 hover:bg-purple-700 text-white text-sm font-bold rounded-xl">해당 영역 평가하기</button>
+                    </div>
+
+                    <div id="card-box-valueAdv" class="bg-slate-50 border border-slate-200 rounded-xl p-5 flex flex-col justify-between space-y-4">
+                        <div>
+                            <div class="flex justify-between items-start mb-2">
+                                <h3 class="font-bold text-slate-800 text-base">4단계: 가치 심화 질문</h3>
+                                <span id="status-badge-valueAdv" class="px-2.5 py-1 bg-slate-200 text-slate-600 text-[10px] font-bold rounded-lg uppercase">미완료</span>
+                            </div>
+                            <p class="text-xs text-slate-500 leading-relaxed">학생 개인별로 별도 제시된 가치 심화 문항을 구술합니다.</p>
+                        </div>
+                        <button id="btn-start-valueAdv" onclick="window.openPrepCard('valueAdv')" class="w-full py-2.5 bg-pink-600 hover:bg-pink-700 text-white text-sm font-bold rounded-xl">해당 영역 평가하기</button>
+                    </div>
+                </div>
+
+                <div class="pt-4 border-t border-slate-100">
+                    <button id="btn-finish-all" onclick="window.finishEvaluation()" class="w-full py-4 bg-slate-200 text-slate-500 font-bold rounded-xl transition cursor-not-allowed" disabled>
+                        모든 평가 영역을 완료해야 제출이 가능합니다
+                    </button>
+                </div>
+            </div>
+
+            <!-- 준비 화면 -->
+            <div id="student-prep-card" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-xl mx-auto space-y-6 text-center">
+                <div class="flex justify-between items-center border-b pb-4 text-left">
+                    <div>
+                        <h3 id="prep-stage-title" class="font-bold text-slate-800 text-lg">-</h3>
+                        <p id="prep-stage-subtitle" class="text-xs text-indigo-600 font-medium">-</p>
+                    </div>
+                    <button onclick="window.returnToHub()" class="px-3 py-1.5 bg-slate-100 text-slate-600 text-xs font-bold rounded-lg">대시보드로 돌아가기</button>
+                </div>
+                
+                <div id="prep-content-box" class="bg-slate-50 p-5 sm:p-8 rounded-xl border border-slate-200/60 space-y-5">
+                    <div id="prep-draw-box" class="space-y-4 hidden">
+                        <p class="text-sm font-bold text-slate-800">아래 버튼을 눌러 평가 문항을 무작위로 추첨하세요.</p>
+                        <button id="btn-draw-question" onclick="window.drawQuestionForCurrentStage()" class="w-full py-4 bg-blue-600 hover:bg-blue-700 text-white font-black text-lg rounded-xl shadow-md">
+                            🎲 무작위 질문 뽑기
+                        </button>
+                    </div>
+
+                    <div id="prep-question-display-box" class="hidden bg-white p-6 rounded-xl border border-slate-200 shadow-inner min-h-[120px] flex items-center justify-center">
+                        <p id="prep-question-text" class="text-base font-bold text-slate-900 leading-relaxed">-</p>
+                    </div>
+
+                    <div id="prep-action-box" class="hidden space-y-4"></div>
+                </div>
+            </div>
+
+            <!-- 녹화 화면 -->
+            <div id="student-eval-active-card" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-2xl mx-auto space-y-6">
+                <div class="flex justify-between items-center border-b pb-4">
+                    <div>
+                        <h3 id="active-stage-title" class="font-bold text-slate-800 text-lg">구술 답변 녹화 중</h3>
+                        <p class="text-xs text-indigo-600 font-medium leading-relaxed mt-1" id="active-question-display">-</p>
+                    </div>
+                    <div id="timer-badge" class="px-4 py-2 bg-emerald-50 text-emerald-600 font-mono font-black text-lg sm:text-xl rounded-xl border border-emerald-100 min-w-[90px] text-center shadow-sm">
+                        0분 0초
+                    </div>
+                </div>
+
+                <div class="relative bg-black rounded-xl overflow-hidden aspect-video flex items-center justify-center border border-slate-800 shadow-inner">
+                    <video id="live-webcam-preview" autoplay muted playsinline class="w-full h-full object-cover -scale-x-100"></video>
+                    <div class="absolute top-3 left-3 bg-red-600 text-white text-[10px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 shadow">
+                        <span class="w-2 h-2 rounded-full bg-white animate-ping"></span> REC (현재 답변 녹화 중)
+                    </div>
+                </div>
+
+                <button onclick="window.finishRecording()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm">
+                    ✅ 현재 영역 답변 완료 (대시보드로 돌아가기)
+                </button>
+            </div>
+
+            <!-- 평가 완료 화면 -->
+            <div id="student-complete-card" class="hidden bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 max-w-2xl mx-auto space-y-6">
+                <div class="text-center space-y-3 pb-4 border-b">
+                    <div class="w-16 h-16 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto text-3xl font-bold">🎉</div>
+                    <div>
+                        <h3 class="text-xl font-bold text-slate-800">모든 구술평가 수고하셨습니다!</h3>
+                        <p class="text-xs text-slate-500 mt-1">아래 [내 PC 파일 백업 및 완료] 버튼을 누르면 다운로드 폴더에 영상이 백업 저장됩니다.</p>
+                    </div>
+                </div>
+
+                <div class="pt-4 space-y-3">
+                    <button id="btn-download-all" onclick="window.downloadAllFiles()" class="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-sm">
+                        💾 내 PC 파일 백업 및 저장 완료
+                    </button>
+                    <button onclick="window.fullResetAndGoHome()" class="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-sm rounded-xl transition border border-slate-200">
+                        초기 화면으로 돌아가기
+                    </button>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- 교사 관리 화면 -->
+        <main id="view-teacher" class="hidden space-y-6">
+            <div class="bg-white p-6 sm:p-8 rounded-2xl shadow-sm border border-slate-100 space-y-6">
+                <div class="flex justify-between items-center">
+                    <div>
+                        <h2 class="text-lg font-bold text-slate-800">교사 통합 관리 대시보드</h2>
+                        <p class="text-xs text-slate-500 mt-1">학생 명단을 엑셀 파일로 업로드하여 등록하거나 조회하세요.</p>
+                    </div>
+                    <button onclick="window.clearAllData()" class="px-4 py-2 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl border border-rose-200">
+                        🗑️ 명단 초기화
+                    </button>
+                </div>
+
+                <div id="drop-zone" class="border-2 border-dashed border-slate-200 rounded-2xl p-6 text-center bg-slate-50 hover:bg-slate-100/50 transition relative">
+                    <input type="file" id="teacher-excel-input" accept=".xlsx, .xls" class="hidden" onchange="window.handleExcelUpload(event)">
+                    <label for="teacher-excel-input" class="cursor-pointer space-y-2 block">
+                        <span class="text-3xl pointer-events-none">📊</span>
+                        <div class="text-sm font-semibold text-indigo-600 pointer-events-none">신규 엑셀 명단 파일 업로드하기 (.xlsx)</div>
+                        <p class="text-[11px] text-slate-400 pointer-events-none">파일을 클릭하거나 여기에 드래그 앤 드롭 하세요.</p>
+                    </label>
+                </div>
+
+                <div class="flex justify-between items-center bg-indigo-50 p-4 rounded-xl border border-indigo-100">
+                    <div class="text-xs text-indigo-900 font-medium">
+                        현재 등록된 학생 데이터: 총 <span id="excel-count" class="font-bold text-indigo-700">0</span>명
+                    </div>
+                </div>
+
+                <div class="overflow-x-auto border border-slate-200 rounded-xl">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-slate-100 text-slate-600 font-bold border-b">
+                            <tr><th class="p-3">이름</th><th class="p-3">반</th><th class="p-3">번호</th><th class="p-3">도서명</th><th class="p-3">저자명</th><th class="p-3">분류</th></tr>
+                        </thead>
+                        <tbody id="master-table-body" class="divide-y divide-slate-100">
+                            <tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+
+    </div>
+
+    <script>
+        const CLOUD_UPLOAD_URL = "https://script.google.com/macros/s/AKfycbw25ciHqowp59J_aBB0Ce6OHxdZ7rs5yWCvpZKsx8n80xsoXBjn45KMOqz_8oun1TGg/exec";
+
+        const DEFAULT_STUDENTS = [
+            { 이름: "홍길동", 반: "1", 번호: "5", 도서명: "소나기", 저자명: "황순원", 분류: "novel" },
+            { 이름: "김철수", 반: "2", 번호: "5", 도서명: "총 균 쇠", 저자명: "재레드 다이아몬드", 분류: "non-novel" },
+            { 이름: "이영희", 반: "3", 번호: "5", 도서명: "자전거 도둑", 저자명: "박완서", 분류: "novel" }
+        ];
+
+        window.tempExcelRows = [];
+        window.activeStudentData = null;
+        let mediaStreamRef = null;
+        let mediaRecorderVideo = null;
+        let videoChunks = [];
+        let activeIntervalTimer = null;
+        let activeStageActiveSeconds = 0;
+
+        let globalTimerInterval = null;
+        let globalElapsedSeconds = 0;
+        const TOTAL_ALLOWED_SECONDS = 20 * 60;
+
+        window.evalData = {
+            cognitive: { status: 'pending', title: '1단계: 인지 질문', question: '', duration: 0, videoBlob: null },
+            cognitiveAdv: { status: 'pending', title: '2단계: 인지 심화 질문', question: '학생 개인별 제시 심화 문항', duration: 0, videoBlob: null },
+            value: { status: 'pending', title: '3단계: 가치 질문', question: '', duration: 0, videoBlob: null },
+            valueAdv: { status: 'pending', title: '4단계: 가치 심화 질문', question: '학생 개인별 제시 심화 문항', duration: 0, videoBlob: null }
+        };
+        let currentEvalStageKey = '';
+
+        const questionDatabase = {
+            novel: {
+                cognitive: ["중심 사건이 주인공에게 미친 결정적인 영향은 무엇인가요?", "주인공의 내면 심리 변화를 설명해 주세요."],
+                value: ["만약 본인이 주인공과 같은 딜레마에 처한다면 어떤 선택을 할 것인가요?", "등장인물의 행동 중 윤리적 논쟁 요소를 평가해 보세요."]
+            },
+            "non-novel": {
+                cognitive: ["저자가 비판하고자 한 핵심 통념이나 문제점은 무엇인가요?", "주장을 뒷받침하는 핵심 논거 2가지를 설명해 주세요."],
+                value: ["저자의 주장에 동의하지 않는 한계점이 있다면 무엇인가요?", "이 책의 문제 의식을 현대 사회 현상에 어떻게 적용할 수 있나요?"]
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            window.loadInitialStudents();
+            window.setupDragAndDrop();
+        });
+
+        window.loadInitialStudents = function() {
+            const cached = localStorage.getItem('cached_student_rows');
+            if (cached) {
+                try { window.tempExcelRows = JSON.parse(cached); } catch (e) { window.tempExcelRows = DEFAULT_STUDENTS; }
+            } else {
+                window.tempExcelRows = DEFAULT_STUDENTS;
+                localStorage.setItem('cached_student_rows', JSON.stringify(DEFAULT_STUDENTS));
+            }
+            const countEl = document.getElementById("excel-count");
+            if (countEl) countEl.innerText = window.tempExcelRows.length;
+            window.renderMasterTable(window.tempExcelRows);
+        };
+
+        window.startGlobalTimer = function() {
+            const banner = document.getElementById("global-timer-banner");
+            const displayEl = document.getElementById("global-timer-display");
+            const elapsedEl = document.getElementById("global-timer-elapsed");
+            
+            if (banner) banner.classList.remove("hidden");
+            
+            clearInterval(globalTimerInterval);
+            globalElapsedSeconds = 0;
+
+            globalTimerInterval = setInterval(() => {
+                globalElapsedSeconds++;
+                const remaining = TOTAL_ALLOWED_SECONDS - globalElapsedSeconds;
+                
+                const remMin = Math.max(0, Math.floor(remaining / 60));
+                const remSec = Math.max(0, remaining % 60);
+                const remFormatted = `${String(remMin).padStart(2, '0')}:${String(remSec).padStart(2, '0')}`;
+                
+                const elMin = Math.floor(globalElapsedSeconds / 60);
+                const elSec = globalElapsedSeconds % 60;
+                const elFormatted = `${String(elMin).padStart(2, '0')}:${String(elSec).padStart(2, '0')}`;
+
+                if (displayEl) displayEl.innerText = remFormatted;
+                if (elapsedEl) elapsedEl.innerText = `경과: ${elFormatted}`;
+
+                if (remaining <= 0 && globalElapsedSeconds === TOTAL_ALLOWED_SECONDS) {
+                    window.showModal("시간 초과", "제한시간 20분이 경과되었습니다.");
+                }
+            }, 1000);
+        };
+
+        window.showModal = function(title, desc) {
+            document.getElementById("modal-title").innerText = title;
+            document.getElementById("modal-desc").innerText = desc;
+            document.getElementById("custom-modal").classList.remove("hidden");
+        };
+
+        window.closeCustomModal = function() {
+            document.getElementById("custom-modal").classList.add("hidden");
+        };
+
+        window.switchTab = function(tabName) {
+            if (tabName === 'student') {
+                document.getElementById("view-student").classList.remove('hidden');
+                document.getElementById("view-teacher").classList.add('hidden');
+            } else {
+                document.getElementById("view-student").classList.add('hidden');
+                document.getElementById("view-teacher").classList.remove('hidden');
+            }
+        };
+
+        window.searchStudentData = function() {
+            const queryVal = document.getElementById("search-query").value.trim();
+            if (!queryVal) return window.showModal("알림", "학생 이름 또는 번호를 입력해주세요.");
+            
+            let list = window.tempExcelRows.length > 0 ? window.tempExcelRows : DEFAULT_STUDENTS;
+
+            let found = list.filter(r => 
+                String(r.번호 || '').trim() === queryVal || 
+                String(r.이름 || '').includes(queryVal)
+            );
+            
+            const resultBox = document.getElementById("search-result-box");
+            const manualBox = document.getElementById("manual-entry-box");
+            const listContainer = document.getElementById("student-list-container");
+            const titleEl = document.getElementById("search-count-title");
+
+            if (found.length === 0) {
+                resultBox.classList.add("hidden");
+                manualBox.classList.remove("hidden");
+                document.getElementById("manual-name").value = queryVal;
+            } else {
+                manualBox.classList.add("hidden");
+                resultBox.classList.remove("hidden");
+                titleEl.innerText = !isNaN(queryVal) ? `🔍 번호 [${queryVal}번] 학생 목록입니다:` : `🔍 이름 [${queryVal}] 검색 결과입니다:`;
+                
+                listContainer.innerHTML = "";
+                found.forEach(student => {
+                    const card = document.createElement("div");
+                    card.className = "bg-indigo-50/70 border border-indigo-100 p-3.5 rounded-xl flex justify-between items-center hover:bg-indigo-100/50 transition";
+                    card.innerHTML = `
+                        <div class="text-xs space-y-0.5">
+                            <div class="font-bold text-indigo-950 text-sm">${student.반 || '-'}반 ${student.번호 || '-'}번 : ${student.이름}</div>
+                            <div class="text-slate-600">도서: <strong>${student.도서명 || '-'}</strong> (${student.저자명 || '-'})</div>
+                        </div>
+                        <button type="button" onclick='window.selectStudent(${JSON.stringify(student)})' class="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-lg transition shadow-sm">선택</button>
+                    `;
+                    listContainer.appendChild(card);
+                });
+            }
+        };
+
+        window.selectStudent = function(student) {
+            window.activeStudentData = student;
+            window.showPermissionCard();
+        };
+
+        window.startManualEval = function() {
+            const name = document.getElementById("manual-name").value.trim();
+            if (!name) return window.showModal("알림", "이름을 입력해주세요.");
+            window.activeStudentData = {
+                이름: name,
+                반: document.getElementById("manual-class").value.trim(),
+                번호: document.getElementById("manual-no").value.trim(),
+                도서명: document.getElementById("manual-book").value.trim() || '자율도서',
+                저자명: document.getElementById("manual-author").value.trim() || '미상',
+                분류: document.getElementById("manual-category").value
+            };
+            window.showPermissionCard();
+        };
+
+        window.showPermissionCard = function() {
+            document.getElementById("student-login-card").classList.add("hidden");
+            document.getElementById("student-permission-card").classList.remove("hidden");
+        };
+
+        // ⚡ [속도 최적화 1] 해상도 및 프레임 제한 (용량 80% 축소)
+        window.requestPermissionsAndEnterHub = async function() {
+            try {
+                mediaStreamRef = await navigator.mediaDevices.getUserMedia({ 
+                    video: { width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 15 } }, 
+                    audio: true 
+                });
+                document.getElementById("student-permission-card").classList.add("hidden");
+                document.getElementById("student-hub-card").classList.remove("hidden");
+                
+                window.startGlobalTimer();
+                window.renderHub();
+            } catch (err) {
+                window.showModal("권한 오류", "카메라 및 마이크 권한을 허용해야 진행이 가능합니다.");
+            }
+        };
+
+        window.renderHub = function() {
+            const s = window.activeStudentData;
+            document.getElementById("hub-student-meta").innerText = `${s.이름} 학생 (${s.반 || '-'}반 ${s.번호 || '-'}번)`;
+            document.getElementById("hub-book-meta").innerText = `도서: ${s.도서명}`;
+        };
+
+        window.openPrepCard = function(stageKey) {
+            currentEvalStageKey = stageKey;
+            document.getElementById("student-hub-card").classList.add("hidden");
+            document.getElementById("student-prep-card").classList.remove("hidden");
+            document.getElementById("prep-stage-title").innerText = window.evalData[stageKey].title;
+
+            if (stageKey === 'cognitive' || stageKey === 'value') {
+                document.getElementById("prep-draw-box").classList.remove("hidden");
+                document.getElementById("prep-question-display-box").classList.add("hidden");
+                document.getElementById("prep-action-box").classList.add("hidden");
+            } else {
+                document.getElementById("prep-draw-box").classList.add("hidden");
+                document.getElementById("prep-question-text").innerText = window.evalData[stageKey].question;
+                document.getElementById("prep-question-display-box").classList.remove("hidden");
+                document.getElementById("prep-action-box").innerHTML = `
+                    <button onclick="window.beginRecording()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl">답변 녹화 시작하기</button>
+                `;
+                document.getElementById("prep-action-box").classList.remove("hidden");
+            }
+        };
+
+        window.drawQuestionForCurrentStage = function() {
+            const isNovel = (window.activeStudentData.분류 === 'novel' || window.activeStudentData.분류 === '문학(소설)');
+            const catKey = isNovel ? 'novel' : 'non-novel';
+            const bank = questionDatabase[catKey][currentEvalStageKey] || ["자유롭게 탐구 소감을 발표하세요."];
+            const q = bank[Math.floor(Math.random() * bank.length)];
+            
+            window.evalData[currentEvalStageKey].question = q;
+            document.getElementById("prep-question-text").innerText = q;
+            document.getElementById("prep-draw-box").classList.add("hidden");
+            document.getElementById("prep-question-display-box").classList.remove("hidden");
+            
+            document.getElementById("prep-action-box").innerHTML = `
+                <button onclick="window.beginRecording()" class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl">이 문항으로 답변 녹화 시작하기</button>
+            `;
+            document.getElementById("prep-action-box").classList.remove("hidden");
+        };
+
+        window.returnToHub = function() {
+            document.getElementById("student-prep-card").classList.add("hidden");
+            document.getElementById("student-hub-card").classList.remove("hidden");
+        };
+
+        // ⚡ [속도 최적화 2] 녹화 비트레이트 제한 (용량 다이어트)
+        window.beginRecording = function() {
+            document.getElementById("student-prep-card").classList.add("hidden");
+            document.getElementById("student-eval-active-card").classList.remove("hidden");
+            document.getElementById("active-question-display").innerText = window.evalData[currentEvalStageKey].question;
+
+            videoChunks = [];
+            document.getElementById("live-webcam-preview").srcObject = mediaStreamRef;
+
+            const options = { mimeType: 'video/webm;codecs=vp8', videoBitsPerSecond: 600000 };
+            try { mediaRecorderVideo = new MediaRecorder(mediaStreamRef, options); } catch(e) { mediaRecorderVideo = new MediaRecorder(mediaStreamRef); }
+
+            mediaRecorderVideo.ondataavailable = e => { if (e.data.size > 0) videoChunks.push(e.data); };
+            mediaRecorderVideo.start(1000);
+
+            activeStageActiveSeconds = 0;
+            clearInterval(activeIntervalTimer);
+            activeIntervalTimer = setInterval(() => {
+                activeStageActiveSeconds++;
+                document.getElementById("timer-badge").innerText = `${Math.floor(activeStageActiveSeconds / 60)}분 ${activeStageActiveSeconds % 60}초`;
+            }, 1000);
+        };
+
+        // ⚡ [속도 최적화 3] 각 영역 녹화 완료 직후 백그라운드 사전 전송 + 버튼 비활성화 회색 처리
+        window.finishRecording = function() {
+            clearInterval(activeIntervalTimer);
+            if (mediaRecorderVideo && mediaRecorderVideo.state !== 'inactive') mediaRecorderVideo.stop();
+            
+            setTimeout(() => {
+                const key = currentEvalStageKey;
+                const blob = new Blob(videoChunks, { type: 'video/mp4' });
+                window.evalData[key].videoBlob = blob;
+                window.evalData[key].status = 'completed';
+
+                // 상태 뱃지
+                const badge = document.getElementById(`status-badge-${key}`);
+                badge.innerText = "완료됨";
+                badge.className = "px-2.5 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold rounded-lg";
+
+                // 버튼 색상: 비활성화 회색 톤 (재녹음 가능)
+                const btn = document.getElementById(`btn-start-${key}`);
+                btn.innerText = "✅ 완료됨 (클릭 시 재녹음)";
+                btn.className = "w-full py-2.5 bg-slate-300 hover:bg-slate-400 text-slate-700 text-sm font-bold rounded-xl transition shadow-sm";
+
+                document.getElementById("student-eval-active-card").classList.add("hidden");
+                document.getElementById("student-hub-card").classList.remove("hidden");
+
+                // 🚀 백그라운드 자동 전송 (대기시간 제로화)
+                const s = window.activeStudentData;
+                const folderName = `${s.반 || '0'}-${s.번호 || '0'}_${s.이름}(${s.도서명})`;
+                const fileName = `${s.이름}_${window.evalData[key].title.replace(/[: ]/g, '_')}.mp4`;
+                uploadFileToGoogleDrive(blob, fileName, folderName);
+
+                const finishBtn = document.getElementById("btn-finish-all");
+                finishBtn.disabled = false;
+                finishBtn.innerText = "✅ 제출 및 저장 단계로 이동";
+                finishBtn.className = "w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl shadow-lg transition";
+            }, 300);
+        };
+
+        window.finishEvaluation = function() {
+            clearInterval(globalTimerInterval);
+            document.getElementById("student-hub-card").classList.add("hidden");
+            document.getElementById("student-complete-card").classList.remove("hidden");
+        };
+
+        // 내 PC 다운로드 백업
+        window.downloadAllFiles = async function() {
+            const s = window.activeStudentData;
+            let completedCount = 0;
+
+            for (let key in window.evalData) {
+                const d = window.evalData[key];
+                if (d.status === 'completed' && d.videoBlob) {
+                    completedCount++;
+                    const fileName = `${s.반 || '0'}반_${s.번호 || '0'}번_${s.이름}_${d.title.replace(/[: ]/g, '_')}.mp4`;
+                    const url = URL.createObjectURL(d.videoBlob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = fileName;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }
+            }
+            if (completedCount > 0) {
+                alert('🎉 학생 PC 다운로드 폴더에 영상 백업이 완료되었습니다.');
+            }
+        };
+
+        async function uploadFileToGoogleDrive(blob, fileName, folderName) {
+            try {
+                const base64Data = await blobToBase64(blob);
+                const payload = {
+                    action: 'start',
+                    name: fileName,
+                    mime: 'video/mp4',
+                    folder: folderName,
+                    data: base64Data
+                };
+
+                await fetch(CLOUD_UPLOAD_URL, {
+                    method: 'POST',
+                    mode: 'no-cors',
+                    headers: { 'Content-Type': 'text/plain' },
+                    body: JSON.stringify(payload)
+                });
+            } catch (err) {
+                console.log("자동 백그라운드 전송 진행 중");
+            }
+        }
+
+        function blobToBase64(blob) {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result.split(',')[1]);
+                reader.onerror = reject;
+                reader.readAsDataURL(blob);
+            });
+        }
+
+        window.handleExcelUpload = function(event) {
+            const file = event.target.files[0];
+            if (file) window.processExcelFile(file);
+            event.target.value = "";
+        };
+
+        window.processExcelFile = function(file) {
+            const reader = new FileReader();
+            reader.readAsArrayBuffer(file);
+            reader.onload = function(e) {
+                try {
+                    const data = new Uint8Array(e.target.result);
+                    const workbook = XLSX.read(data, { type: 'array' });
+                    const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+                    const jsonData = XLSX.utils.sheet_to_json(firstSheet);
+                    
+                    if (!jsonData || jsonData.length === 0) return window.showModal("알림", "엑셀 파일 데이터가 없습니다.");
+
+                    let parsedList = [];
+                    jsonData.forEach((row) => {
+                        const keys = Object.keys(row);
+                        const nameKey = keys.find(k => k.includes('이름') || k.includes('성명'));
+                        const classKey = keys.find(k => k.includes('반'));
+                        const noKey = keys.find(k => k.includes('번호') || k.includes('학번'));
+                        const bookKey = keys.find(k => k.includes('도서') || k.includes('책제목'));
+                        const authorKey = keys.find(k => k.includes('저자') || k.includes('지은이'));
+                        const catKey = keys.find(k => k.includes('분류') || k.includes('유형'));
+
+                        const name = nameKey ? String(row[nameKey] || '').trim() : '';
+                        if (!name) return;
+
+                        const cls = classKey ? String(row[classKey] || '').trim() : '';
+                        const no = noKey ? String(row[noKey] || '').trim() : '';
+                        const book = bookKey ? String(row[bookKey] || '').trim() : '자율도서';
+                        const author = authorKey ? String(row[authorKey] || '').trim() : '미상';
+                        let cat = catKey ? String(row[catKey] || '').trim().toLowerCase() : 'novel';
+                        if (cat.includes('비문학') || cat.includes('non')) cat = 'non-novel'; else cat = 'novel';
+
+                        parsedList.push({ 이름: name, 반: cls, 번호: no, 도서명: book, 저자명: author, 분류: cat });
+                    });
+
+                    if (parsedList.length > 0) {
+                        window.tempExcelRows = parsedList;
+                        localStorage.setItem('cached_student_rows', JSON.stringify(parsedList));
+                        document.getElementById("excel-count").innerText = parsedList.length;
+                        window.renderMasterTable(parsedList);
+                        window.showModal("엑셀 등록 완료", `총 ${parsedList.length}명의 학생 데이터가 새로 등록되었습니다.`);
+                    }
+                } catch(err) { window.showModal("오류", "엑셀 파싱 오류: " + err.message); }
+            };
+        };
+
+        window.renderMasterTable = function(rows) {
+            const tbody = document.getElementById("master-table-body");
+            tbody.innerHTML = "";
+            if (!rows || rows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>`;
+                return;
+            }
+            rows.forEach(r => {
+                const tr = document.createElement("tr");
+                tr.innerHTML = `<td class="p-3 font-bold">${r.이름 || ''}</td><td class="p-3">${r.반 ? r.반 + '반' : '-'}</td><td class="p-3">${r.번호 ? r.번호 + '번' : '-'}</td><td class="p-3">${r.도서명 || '-'}</td><td class="p-3">${r.저자명 || '-'}</td><td class="p-3"><span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded">${(r.분류 === 'novel' || r.분류 === '문학(소설)') ? '문학(소설)' : '비문학'}</span></td>`;
+                tbody.appendChild(tr);
+            });
+        };
+
+        window.setupDragAndDrop = function() {
+            const dropZone = document.getElementById('drop-zone');
+            if (!dropZone) return;
+            dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('bg-indigo-50'); });
+            dropZone.addEventListener('dragleave', (e) => { e.preventDefault(); dropZone.classList.remove('bg-indigo-50'); });
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('bg-indigo-50');
+                if (e.dataTransfer.files && e.dataTransfer.files.length > 0) window.processExcelFile(e.dataTransfer.files[0]);
+            });
+        };
+
+        window.clearAllData = function() {
+            localStorage.removeItem('cached_student_rows');
+            window.tempExcelRows = DEFAULT_STUDENTS;
+            document.getElementById("excel-count").innerText = DEFAULT_STUDENTS.length;
+            window.renderMasterTable(DEFAULT_STUDENTS);
+            window.showModal("초기화 완료", "기본 학생 명단으로 재설정되었습니다.");
+        };
+
+        window.fullResetAndGoHome = function() {
+            location.reload();
+        };
+    </script>
+</body>
+</html>
