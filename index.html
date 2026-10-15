@@ -327,12 +327,12 @@
 
         const questionDatabase = {
             novel: {
-                cognitive: ["중심 사건이 주인공에게 미친 결정적인 영향은 무엇인가요?", "주인공의 내면 심리 변화를 설명해 주세요."],
-                value: ["만약 본인이 주인공과 같은 딜레마에 처한다면 어떤 선택을 할 것인가요?", "등장인물의 행동 중 윤리적 논쟁 요소를 평가해 보세요."]
+                cognitive: ["소설 속 갈등이 최고조에 달하는 가장 핵심적인 사건은 무엇이며, 그 사건이 발생하게 된 필연적인 원인(복선)은 작품에 어떻게 제시되어 있나요?", "주요 인물이 내린 선택 중 가장 이해하기 어려운 것은 무엇이며, 작품 전체 맥락을 볼 때 그 선택의 진짜 동기는 무엇이라고 판단되나요?", "이 작품의 배경(시간, 공간, 사회)은 인물들의 삶과 선택에 구체적인 어떤 제약이나 영향을 주나요?", "이 작품에서 서술 방식(시점, 문체, 구성)이 이야기의 의미 전달에 어떤 효과를 만들어 내나요?", "이 소설의 결말은 작가가 독자에게 전하고자 한 메시지와 어떻게 연결되나요?"],
+                value: ["만약 본인이 주인공과 같은 딜레마(위기)에 처한다면, 같은 선택을 할 것인가요, 다른 선택을 할 것인가요? 그 이유는 무엇인가요?", "등장인물의 행동 중 윤리적으로 논쟁의 여지가 있는 부분은 무엇인가요? 그리고 본인은 이를 어떻게 평가하나요?", "주인공과 대립하는 인물(또는 주변 인물)의 시각에서 볼 때, 주인공의 행동은 정당화될 수 있을까요?", "인물이 무언가를 얻기 위해 포기한 것은 무엇이며, 그것은 합당한 희생이었나요?", "이 책을 읽고 나서 보편적 가치(사랑, 정의, 생명, 가족 등)에 대한 생각이 어떻게 달라졌나요?"]
             },
             "non-novel": {
-                cognitive: ["저자가 비판하고자 한 핵심 통념이나 문제점은 무엇인가요?", "주장을 뒷받침하는 핵심 논거 2가지를 설명해 주세요."],
-                value: ["저자의 주장에 동의하지 않는 한계점이 있다면 무엇인가요?", "이 책의 문제 의식을 현대 사회 현상에 어떻게 적용할 수 있나요?"]
+                cognitive: ["저자가 이 책에서 가장 설득하고자 하는 핵심 주장은 무엇이며, 이를 뒷받침하는 가장 결정적인 근거는 무엇인가요?", "책에 등장하는 여러 현상이나 주요 개념들은 서로 어떤 인과관계(원인과 결과)로 연결되어 있나요?", "저자는 자신의 주장을 어떤 방식(예: 통념 비판, 사례 제시, 문제-대안 구조 등)으로 전개하고 있나요?", "저자가 이 책을 집필하게 된 문제의식이나 사회적 배경은 무엇이며, 이를 통해 어떤 변화를 이끌어내고자 했다고 보나요?", "이 책의 결론(또는 마지막 메시지)은 저자가 서두에서 제기한 문제의식과 어떻게 연결되나요? 그리고 이를 통해 독자에게 궁극적으로 전달하고자 한 메시지는 무엇이라고 볼 수 있나요?"],
+                value: ["저자의 주장에 전적으로 동의하나요? 만약 동의하지 않는다면 어떤 한계가 있다고 보나요?", "책의 문제의식이나 해결책을 오늘날(최근 3~5년, 2020~2026년) 사회의 특정 현안에 어떻게 적용할 수 있나요?", "저자가 제시한 여러 대안 중, 현실적 제약(예산, 시간, 사회적 갈등 등)을 고려할 때 가장 우선적으로 실행되어야 할 것은 무엇이라고 생각하나요?", "이 책이 본인의 기존 편견이나 상식을 어떻게 깨뜨렸으며, 세상을 보는 시각에 어떤 영향을 주었나요?", "저자의 메시지를 본인의 삶이나 진로 분야와 연결지을 때, 지금 당장 실천할 수 있는 것은 무엇인가요?"]
             }
         };
 
@@ -528,7 +528,12 @@
             const isNovel = (window.activeStudentData.분류 === 'novel' || window.activeStudentData.분류 === '소설' || window.activeStudentData.분류 === '문학(소설)');
             const catKey = isNovel ? 'novel' : 'non-novel';
             const bank = questionDatabase[catKey][currentEvalStageKey] || ["자유롭게 탐구 소감을 발표하세요."];
-            const q = bank[Math.floor(Math.random() * bank.length)];
+            // 학생별 고정 배정: 반·번호·이름·영역으로 문항 번호를 정해, 새로고침·재접속·재녹음에도 같은 문항이 나옴
+            const sd = window.activeStudentData;
+            const seed = `${sd.반}|${sd.번호}|${sd.이름}|${currentEvalStageKey}`;
+            let h = 5381;
+            for (let i = 0; i < seed.length; i++) { h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0; }
+            const q = bank[h % bank.length];
             
             window.evalData[currentEvalStageKey].question = q;
             document.getElementById("prep-question-text").innerText = q;
@@ -756,7 +761,7 @@
     // 명단 고정판 표시: 이 글씨가 보이면 새 버전이 배포된 것입니다
     document.addEventListener("DOMContentLoaded",function(){setTimeout(function(){
       var b=document.getElementById("version-badge");
-      if(b) b.textContent="명단고정판 v3 · "+(window.tempExcelRows?window.tempExcelRows.length:0)+"명";
+      if(b) b.textContent="명단고정판 v4 · "+(window.tempExcelRows?window.tempExcelRows.length:0)+"명";
     },300);});
     </script>
 </body>
