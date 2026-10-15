@@ -282,15 +282,16 @@
                     <div class="text-xs text-indigo-900 font-medium">
                         현재 고정 등록된 학생 데이터: 총 <span id="excel-count" class="font-bold text-indigo-700">0</span>명
                     </div>
+                    <button onclick="window.downloadAssignmentCsv()" class="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-lg">📋 학생별 배정문항표(CSV) 받기</button>
                 </div>
 
                 <div class="overflow-x-auto border border-slate-200 rounded-xl max-h-96">
                     <table class="w-full text-left text-xs">
                         <thead class="bg-slate-100 text-slate-600 font-bold border-b sticky top-0">
-                            <tr><th class="p-3">이름</th><th class="p-3">반</th><th class="p-3">번호</th><th class="p-3">도서명</th><th class="p-3">저자명</th><th class="p-3">분류</th></tr>
+                            <tr><th class="p-3">이름</th><th class="p-3">반</th><th class="p-3">번호</th><th class="p-3">도서명</th><th class="p-3">저자명</th><th class="p-3">분류</th><th class="p-3">인지 문항</th><th class="p-3">가치 문항</th></tr>
                         </thead>
                         <tbody id="master-table-body" class="divide-y divide-slate-100">
-                            <tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>
+                            <tr><td colspan="8" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>
                         </tbody>
                     </table>
                 </div>
@@ -522,18 +523,43 @@
             }
         };
 
+        // 학생별 배정 문항 계산 (반·번호·이름·영역으로 고정). 교사 화면/파일명/CSV에서도 같은 값을 사용
+        window.getAssignedQuestion = function(sd, stageKey) {
+            const isNovel = (sd.분류 === 'novel' || sd.분류 === '소설' || sd.분류 === '문학(소설)');
+            const bank = (questionDatabase[isNovel ? 'novel' : 'non-novel'][stageKey]) || ["자유롭게 탐구 소감을 발표하세요."];
+            const seed = `${sd.반}|${sd.번호}|${sd.이름}|${stageKey}`;
+            let h = 5381;
+            for (let i = 0; i < seed.length; i++) { h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0; }
+            const idx = h % bank.length;
+            return { no: idx + 1, text: bank[idx] };
+        };
+
+        window.buildAssignmentCsv = function() {
+            const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+            const lines = [['반','번호','이름','도서명','저자명','분류','인지 문항 번호','인지 문항','가치 문항 번호','가치 문항'].map(esc).join(',')];
+            (window.tempExcelRows || []).forEach(r => {
+                const c = window.getAssignedQuestion(r, 'cognitive');
+                const v = window.getAssignedQuestion(r, 'value');
+                lines.push([r.반, r.번호, r.이름, r.도서명, r.저자명, r.분류 === 'novel' ? '소설' : '비문학', c.no, c.text, v.no, v.text].map(esc).join(','));
+            });
+            return lines.join('\r\n');
+        };
+
+        window.downloadAssignmentCsv = function() {
+            const blob = new Blob(['\uFEFF' + window.buildAssignmentCsv()], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = '학생별_배정문항표.csv';
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
         window.drawQuestionForCurrentStage = function() {
             // 이미 문항이 정해졌다면 다시 뽑지 않고 기존 문항을 유지
             if (window.evalData[currentEvalStageKey].question) { window.openPrepCard(currentEvalStageKey); return; }
-            const isNovel = (window.activeStudentData.분류 === 'novel' || window.activeStudentData.분류 === '소설' || window.activeStudentData.분류 === '문학(소설)');
-            const catKey = isNovel ? 'novel' : 'non-novel';
-            const bank = questionDatabase[catKey][currentEvalStageKey] || ["자유롭게 탐구 소감을 발표하세요."];
-            // 학생별 고정 배정: 반·번호·이름·영역으로 문항 번호를 정해, 새로고침·재접속·재녹음에도 같은 문항이 나옴
-            const sd = window.activeStudentData;
-            const seed = `${sd.반}|${sd.번호}|${sd.이름}|${currentEvalStageKey}`;
-            let h = 5381;
-            for (let i = 0; i < seed.length; i++) { h = ((h << 5) + h + seed.charCodeAt(i)) >>> 0; }
-            const q = bank[h % bank.length];
+            const assigned = window.getAssignedQuestion(window.activeStudentData, currentEvalStageKey);
+            const q = assigned.text;
+            window.evalData[currentEvalStageKey].questionNo = assigned.no;
             
             window.evalData[currentEvalStageKey].question = q;
             document.getElementById("prep-question-text").innerText = q;
@@ -596,7 +622,8 @@
 
                 const s = window.activeStudentData;
                 const folderName = `${s.반 || '0'}-${s.번호 || '0'}_${s.이름}(${s.도서명})`;
-                const fileName = `${s.이름}_${window.evalData[key].title.replace(/[: ]/g, '_')}.mp4`;
+                const qNoTag = window.evalData[key].questionNo ? `_문항${window.evalData[key].questionNo}` : '';
+                const fileName = `${s.이름}_${window.evalData[key].title.replace(/[: ]/g, '_')}${qNoTag}.mp4`;
                 uploadFileToGoogleDrive(blob, fileName, folderName);
 
                 const finishBtn = document.getElementById("btn-finish-all");
@@ -620,7 +647,7 @@
                 const d = window.evalData[key];
                 if (d.status === 'completed' && d.videoBlob) {
                     completedCount++;
-                    const fileName = `${s.반 || '0'}반_${s.번호 || '0'}번_${s.이름}_${d.title.replace(/[: ]/g, '_')}.mp4`;
+                    const fileName = `${s.반 || '0'}반_${s.번호 || '0'}번_${s.이름}_${d.title.replace(/[: ]/g, '_')}${d.questionNo ? '_문항' + d.questionNo : ''}.mp4`;
                     const url = URL.createObjectURL(d.videoBlob);
                     const a = document.createElement("a");
                     a.href = url;
@@ -722,12 +749,12 @@
             const tbody = document.getElementById("master-table-body");
             tbody.innerHTML = "";
             if (!rows || rows.length === 0) {
-                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>`;
+                tbody.innerHTML = `<tr><td colspan="8" class="p-6 text-center text-slate-400">등록된 학생 데이터가 없습니다.</td></tr>`;
                 return;
             }
             rows.forEach(r => {
                 const tr = document.createElement("tr");
-                tr.innerHTML = `<td class="p-3 font-bold">${r.이름 || ''}</td><td class="p-3">${r.반 ? r.반 + '반' : '-'}</td><td class="p-3">${r.번호 ? r.번호 + '번' : '-'}</td><td class="p-3">${r.도서명 || '-'}</td><td class="p-3">${r.저자명 || '-'}</td><td class="p-3"><span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded">${(r.분류 === 'novel' || r.분류 === '소설' || r.분류 === '문학(소설)') ? '문학(소설)' : '비문학'}</span></td>`;
+                tr.innerHTML = `<td class="p-3 font-bold">${r.이름 || ''}</td><td class="p-3">${r.반 ? r.반 + '반' : '-'}</td><td class="p-3">${r.번호 ? r.번호 + '번' : '-'}</td><td class="p-3">${r.도서명 || '-'}</td><td class="p-3">${r.저자명 || '-'}</td><td class="p-3"><span class="px-2 py-0.5 bg-indigo-50 text-indigo-700 font-bold rounded">${(r.분류 === 'novel' || r.분류 === '소설' || r.분류 === '문학(소설)') ? '문학(소설)' : '비문학'}</span></td><td class="p-3 whitespace-nowrap" title="${window.getAssignedQuestion(r,'cognitive').text.replace(/"/g,'&quot;')}">${window.getAssignedQuestion(r,'cognitive').no}번</td><td class="p-3 whitespace-nowrap" title="${window.getAssignedQuestion(r,'value').text.replace(/"/g,'&quot;')}">${window.getAssignedQuestion(r,'value').no}번</td>`;
                 tbody.appendChild(tr);
             });
         };
@@ -761,7 +788,7 @@
     // 명단 고정판 표시: 이 글씨가 보이면 새 버전이 배포된 것입니다
     document.addEventListener("DOMContentLoaded",function(){setTimeout(function(){
       var b=document.getElementById("version-badge");
-      if(b) b.textContent="명단고정판 v4 · "+(window.tempExcelRows?window.tempExcelRows.length:0)+"명";
+      if(b) b.textContent="명단고정판 v5 · "+(window.tempExcelRows?window.tempExcelRows.length:0)+"명";
     },300);});
     </script>
 </body>
